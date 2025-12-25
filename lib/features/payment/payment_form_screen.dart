@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:io';
 import 'package:spendrail_worker_app/l10n/app_localizations.dart';
 import 'package:spendrail_worker_app/services/auth_service.dart';
 import 'package:spendrail_worker_app/services/payment_service.dart';
@@ -148,6 +150,22 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
   }
 
   Future<void> _submitPayment() async {
+    // Ensure any ongoing recording/playback is stopped before submitting
+    try {
+      if (_isRecording) {
+        final path = await _audioRecorder.stop();
+        setState(() {
+          _isRecording = false;
+          _voiceNotePath = path;
+        });
+      }
+      if (_isPlaying) {
+        try { await _audioPlayer.stop(); } catch (e) { debugPrint('Audio stop before submit failed: $e'); }
+      }
+    } catch (e) {
+      debugPrint('Failed to finalize audio before submit: $e');
+    }
+
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
@@ -159,12 +177,35 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
 
       if (userId == null) throw Exception('User not logged in');
 
+      // Upload voice note to Firebase Storage if available
+      String? voiceNoteUrl;
+      if (_voiceNotePath != null && _voiceNotePath!.isNotEmpty) {
+        try {
+          final file = File(_voiceNotePath!);
+          final ext = _voiceNotePath!.split('.').last.toLowerCase();
+          final contentType = ext == 'm4a'
+              ? 'audio/m4a'
+              : (ext == 'aac' ? 'audio/aac' : 'audio/mp4');
+          final ref = FirebaseStorage.instance
+              .ref()
+              .child('voice_notes/$userId/${DateTime.now().millisecondsSinceEpoch}.$ext');
+          final uploadTask = await ref.putFile(
+            file,
+            SettableMetadata(contentType: contentType),
+          );
+          voiceNoteUrl = await uploadTask.ref.getDownloadURL();
+        } catch (e) {
+          debugPrint('Voice note upload failed: $e');
+          // Continue without voice note rather than failing entire payment
+        }
+      }
+
       final firebaseId = await paymentService.initiatePayment(
         userId: userId,
         amount: double.parse(_amountController.text),
         qrData: widget.qrData,
         note: _noteController.text.isEmpty ? null : _noteController.text,
-        voiceNoteUrl: _voiceNotePath,
+        voiceNoteUrl: voiceNoteUrl,
       );
 
       if (mounted) {

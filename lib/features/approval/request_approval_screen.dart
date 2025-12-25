@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:record/record.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:spendrail_worker_app/l10n/app_localizations.dart';
 import 'package:spendrail_worker_app/services/approval_service.dart';
 import 'package:spendrail_worker_app/services/auth_service.dart';
@@ -19,10 +20,14 @@ class _RequestApprovalScreenState extends ConsumerState<RequestApprovalScreen> {
   final _amountController = TextEditingController();
   final _noteController = TextEditingController();
   final _audioRecorder = AudioRecorder();
+  late final AudioPlayer _audioPlayer;
   String _selectedCurrency = 'INR';
   bool _isRecording = false;
   bool _isLoading = false;
   String? _voiceNotePath;
+  bool _isPlaying = false;
+  Duration _duration = Duration.zero;
+  Duration _position = Duration.zero;
 
   final List<String> _currencies = ['INR', 'USD', 'EUR', 'GBP'];
 
@@ -31,7 +36,23 @@ class _RequestApprovalScreenState extends ConsumerState<RequestApprovalScreen> {
     _amountController.dispose();
     _noteController.dispose();
     _audioRecorder.dispose();
+    _audioPlayer.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _audioPlayer = AudioPlayer();
+    _audioPlayer.onPlayerStateChanged.listen((state) {
+      setState(() => _isPlaying = state == PlayerState.playing);
+    });
+    _audioPlayer.onDurationChanged.listen((d) {
+      setState(() => _duration = d);
+    });
+    _audioPlayer.onPositionChanged.listen((p) {
+      setState(() => _position = p);
+    });
   }
 
   Future<void> _toggleRecording() async {
@@ -43,13 +64,60 @@ class _RequestApprovalScreenState extends ConsumerState<RequestApprovalScreen> {
       });
     } else {
       if (await _audioRecorder.hasPermission()) {
+        // Stop any currently playing audio before starting a new recording
+        try { await _audioPlayer.stop(); } catch (e) { debugPrint('Audio stop before recording failed: $e'); }
         await _audioRecorder.start(const RecordConfig(), path: 'approval_voice_${DateTime.now().millisecondsSinceEpoch}.m4a');
         setState(() => _isRecording = true);
       }
     }
   }
 
+  Future<void> _togglePlayPause() async {
+    if (_voiceNotePath == null) return;
+    try {
+      if (_isPlaying) {
+        await _audioPlayer.pause();
+      } else {
+        if (_duration != Duration.zero && _position >= _duration) {
+          await _audioPlayer.seek(Duration.zero);
+        }
+        await _audioPlayer.play(DeviceFileSource(_voiceNotePath!));
+      }
+    } catch (e) {
+      debugPrint('Audio play/pause error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: const Text('Unable to play voice note')),
+        );
+      }
+    }
+  }
+
+  String _formatDuration(Duration d) {
+    final two = (int n) => n.toString().padLeft(2, '0');
+    final minutes = two(d.inMinutes.remainder(60));
+    final seconds = two(d.inSeconds.remainder(60));
+    final hours = d.inHours;
+    return hours > 0 ? '${two(hours)}:$minutes:$seconds' : '$minutes:$seconds';
+  }
+
   Future<void> _submitRequest() async {
+    // Ensure any ongoing recording/playback is stopped before submitting
+    try {
+      if (_isRecording) {
+        final path = await _audioRecorder.stop();
+        setState(() {
+          _isRecording = false;
+          _voiceNotePath = path;
+        });
+      }
+      if (_isPlaying) {
+        try { await _audioPlayer.stop(); } catch (e) { debugPrint('Audio stop before submit failed: $e'); }
+      }
+    } catch (e) {
+      debugPrint('Failed to finalize audio before submit: $e');
+    }
+
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
@@ -187,12 +255,43 @@ class _RequestApprovalScreenState extends ConsumerState<RequestApprovalScreen> {
                 if (_voiceNotePath != null)
                   Padding(
                     padding: EdgeInsets.only(top: AppSpacing.sm),
-                    child: Row(
-                      children: [
-                        Icon(Icons.check_circle, color: theme.colorScheme.secondary, size: 16),
-                        SizedBox(width: AppSpacing.xs),
-                        Text('Voice note recorded', style: context.textStyles.bodySmall?.copyWith(color: theme.colorScheme.secondary)),
-                      ],
+                    child: Card(
+                      margin: EdgeInsets.zero,
+                      child: Padding(
+                        padding: AppSpacing.paddingMd,
+                        child: Row(
+                          children: [
+                            IconButton(
+                              onPressed: _togglePlayPause,
+                              icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill, color: theme.colorScheme.secondary, size: 32),
+                              tooltip: _isPlaying ? 'Pause' : 'Play',
+                            ),
+                            SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Voice note', style: context.textStyles.bodyMedium?.semiBold),
+                                  SizedBox(height: 2),
+                                  Text('${_formatDuration(_position)} / ${_formatDuration(_duration)}', style: context.textStyles.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                                ],
+                              ),
+                            ),
+                            if (_position > Duration.zero && _duration > Duration.zero)
+                              SizedBox(
+                                width: 120,
+                                child: Slider(
+                                  value: _position.inMilliseconds.clamp(0, _duration.inMilliseconds).toDouble(),
+                                  max: (_duration.inMilliseconds == 0 ? 1 : _duration.inMilliseconds).toDouble(),
+                                  onChanged: (v) async {
+                                    final newPos = Duration(milliseconds: v.round());
+                                    try { await _audioPlayer.seek(newPos); } catch (e) { debugPrint('Seek error: $e'); }
+                                  },
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 SizedBox(height: AppSpacing.xl),

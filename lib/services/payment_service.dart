@@ -6,10 +6,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:spendrail_worker_app/models/transaction_model.dart';
 
 class PaymentService {
-  final Dio _dio = Dio();
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 20),
+      sendTimeout: const Duration(seconds: 20),
+      headers: {'Content-Type': 'application/json'},
+    ),
+  );
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   
-  static const String _apiBaseUrl = 'http://100.121.212.21';
+  // SpendRail backend base (provided by user)
+  static const String _apiBaseUrl = 'https://spendrail.onrender.com/api/v1';
   static const Duration _paymentTimeout = Duration(minutes: 5);
   
   Future<String> initiatePayment({
@@ -19,23 +27,45 @@ class PaymentService {
     String? note,
     String? voiceNoteUrl,
   }) async {
+    // Step 1: Create a new transaction document in Firestore
     try {
-      final response = await _dio.post(
-        '$_apiBaseUrl/newTransaction',
-        data: {
-          'userId': userId,
-          'amount': amount,
-          'qrData': qrData,
-          'note': note,
-          'timestamp': DateTime.now().toIso8601String(),
-        },
-      );
-      
-      if (response.statusCode == 200 && response.data['firebaseId'] != null) {
-        return response.data['firebaseId'] as String;
-      } else {
-        throw Exception('Invalid response from server');
+      final now = DateTime.now();
+      final txData = <String, dynamic>{
+        'userId': userId,
+        'amount': amount,
+        'qrData': qrData,
+        'note': note,
+        'voiceNoteUrl': voiceNoteUrl,
+        'status': TransactionStatus.processing.name,
+        'category': TransactionCategory.other.name,
+        'createdAt': Timestamp.fromDate(now),
+        'updatedAt': Timestamp.fromDate(now),
+      };
+
+      final docRef = await _firestore.collection('transactions').add(txData);
+      // Store the generated id back into the document for convenience
+      await docRef.update({'id': docRef.id});
+
+      final firebaseId = docRef.id;
+
+      // Step 2: Call SpendRail API to trigger spend approval using firebaseId
+      try {
+        final response = await _dio.post(
+          '$_apiBaseUrl/transcationApproval',
+          data: {'firebaseId': firebaseId},
+        );
+
+        if (response.statusCode != 200) {
+          debugPrint('Spend approval API returned ${response.statusCode}: ${response.data}');
+          throw Exception('Spend approval request failed');
+        }
+      } catch (e) {
+        debugPrint('Spend approval API error: $e');
+        // Surface the error to caller so UI can notify the user
+        rethrow;
       }
+
+      return firebaseId;
     } catch (e) {
       debugPrint('Payment initiation error: $e');
       rethrow;

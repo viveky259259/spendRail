@@ -1,11 +1,13 @@
 {
-    "name": "dreamflow_counter",
-    "short_name": "dreamflow_counter",
-    "start_url": ".",
+    "name": "SpendRail Worker",
+    "short_name": "SpendRail",
+    "id": "/com.stringswaytech.spendrail",
+    "start_url": "/",
+    "scope": "/",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Fintech wallet for workers: QR payments and spending approvals.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
