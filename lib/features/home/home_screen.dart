@@ -8,13 +8,14 @@ import 'package:spendrail_worker_app/services/auth_service.dart';
 import 'package:spendrail_worker_app/services/payment_service.dart';
 import 'package:spendrail_worker_app/theme.dart';
 
-final recentTransactionsProvider = FutureProvider<List<TransactionModel>>((ref) async {
+final recentTransactionsProvider =
+    FutureProvider<List<TransactionModel>>((ref) async {
   final authService = ref.watch(authServiceProvider);
   final paymentService = ref.watch(paymentServiceProvider);
   final userId = authService.currentUser?.uid;
-  
+
   if (userId == null) return [];
-  
+
   return await paymentService.getUserTransactions(userId, limit: 5);
 });
 
@@ -45,28 +46,34 @@ class HomeScreen extends ConsumerWidget {
             children: [
               Padding(
                 padding: AppSpacing.paddingLg,
-                child: Text(l10n.translate('menu'), style: context.textStyles.titleLarge?.semiBold),
+                child: Text(l10n.translate('menu'),
+                    style: context.textStyles.titleLarge?.semiBold),
               ),
               const Divider(height: 1),
               ListTile(
                 leading: Icon(Icons.person, color: theme.colorScheme.primary),
-                title: Text(l10n.translate('profile'), style: context.textStyles.bodyLarge),
+                title: Text(l10n.translate('profile'),
+                    style: context.textStyles.bodyLarge),
                 onTap: () {
                   Navigator.of(context).pop();
                   context.push('/profile');
                 },
               ),
               ListTile(
-                leading: Icon(Icons.history_rounded, color: theme.colorScheme.primary),
-                title: Text(l10n.translate('history'), style: context.textStyles.bodyLarge),
+                leading: Icon(Icons.history_rounded,
+                    color: theme.colorScheme.primary),
+                title: Text(l10n.translate('history'),
+                    style: context.textStyles.bodyLarge),
                 onTap: () {
                   Navigator.of(context).pop();
                   context.push('/history');
                 },
               ),
               ListTile(
-                leading: Icon(Icons.analytics_rounded, color: theme.colorScheme.primary),
-                title: Text(l10n.translate('analytics'), style: context.textStyles.bodyLarge),
+                leading: Icon(Icons.analytics_rounded,
+                    color: theme.colorScheme.primary),
+                title: Text(l10n.translate('analytics'),
+                    style: context.textStyles.bodyLarge),
                 onTap: () {
                   Navigator.of(context).pop();
                   context.push('/analytics');
@@ -89,7 +96,8 @@ class HomeScreen extends ConsumerWidget {
                         backgroundColor: theme.colorScheme.error,
                         foregroundColor: theme.colorScheme.onError,
                         minimumSize: const Size.fromHeight(48),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
                       ),
                     );
                   },
@@ -109,27 +117,33 @@ class HomeScreen extends ConsumerWidget {
                 data: (user) => Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(l10n.translate('welcome_back'), style: context.textStyles.bodyLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                    Text(l10n.translate('welcome_back'),
+                        style: context.textStyles.bodyLarge?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant)),
                     SizedBox(height: AppSpacing.xs),
-                    Text(user?.name ?? 'User', style: context.textStyles.headlineMedium?.bold),
+                    Text(user?.name ?? 'User',
+                        style: context.textStyles.headlineMedium?.bold),
                   ],
                 ),
                 loading: () => const CircularProgressIndicator(),
                 error: (e, _) => const SizedBox.shrink(),
               ),
               SizedBox(height: AppSpacing.xl),
-              Text(l10n.translate('quick_actions'), style: context.textStyles.titleLarge?.semiBold),
+              Text(l10n.translate('quick_actions'),
+                  style: context.textStyles.titleLarge?.semiBold),
               SizedBox(height: AppSpacing.md),
               Row(
                 children: [
-                  Expanded(child: QuickActionCard(
+                  Expanded(
+                      child: QuickActionCard(
                     icon: Icons.qr_code_scanner_rounded,
                     label: l10n.translate('pay_now'),
                     color: theme.colorScheme.primary,
                     onTap: () => context.push('/scan-qr'),
                   )),
                   SizedBox(width: AppSpacing.md),
-                  Expanded(child: QuickActionCard(
+                  Expanded(
+                      child: QuickActionCard(
                     icon: Icons.approval_rounded,
                     label: l10n.translate('request_approval'),
                     color: theme.colorScheme.secondary,
@@ -140,14 +154,16 @@ class HomeScreen extends ConsumerWidget {
               SizedBox(height: AppSpacing.md),
               Row(
                 children: [
-                  Expanded(child: QuickActionCard(
+                  Expanded(
+                      child: QuickActionCard(
                     icon: Icons.history_rounded,
                     label: l10n.translate('history'),
                     color: theme.colorScheme.tertiary,
                     onTap: () => context.push('/history'),
                   )),
                   SizedBox(width: AppSpacing.md),
-                  Expanded(child: QuickActionCard(
+                  Expanded(
+                      child: QuickActionCard(
                     icon: Icons.analytics_rounded,
                     label: l10n.translate('analytics'),
                     color: const Color(0xFF9C27B0),
@@ -159,7 +175,8 @@ class HomeScreen extends ConsumerWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(l10n.translate('recent_transactions'), style: context.textStyles.titleLarge?.semiBold),
+                  Text(l10n.translate('recent_transactions'),
+                      style: context.textStyles.titleLarge?.semiBold),
                   TextButton(
                     onPressed: () => context.push('/history'),
                     child: Text(l10n.translate('view_all')),
@@ -177,7 +194,9 @@ class HomeScreen extends ConsumerWidget {
                     );
                   }
                   return Column(
-                    children: transactions.map((t) => TransactionListItem(transaction: t)).toList(),
+                    children: transactions
+                        .map((t) => TransactionListItem(transaction: t))
+                        .toList(),
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
@@ -228,7 +247,11 @@ class QuickActionCard extends StatelessWidget {
                 child: Icon(icon, size: 32, color: color),
               ),
               SizedBox(height: AppSpacing.md),
-              Text(label, style: context.textStyles.bodyMedium?.semiBold, textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
+              Text(label,
+                  style: context.textStyles.bodyMedium?.semiBold,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis),
             ],
           ),
         ),
@@ -254,6 +277,8 @@ class TransactionListItem extends StatelessWidget {
         case TransactionStatus.waiting_on_approval:
         case TransactionStatus.waiting_on_manual_approval:
           return Icons.hourglass_empty;
+        case TransactionStatus.transaction_approved:
+          return Icons.thumb_up;
         case TransactionStatus.payment_declined:
         case TransactionStatus.transaction_disapproved:
           return Icons.cancel;
@@ -271,6 +296,8 @@ class TransactionListItem extends StatelessWidget {
         case TransactionStatus.waiting_on_approval:
         case TransactionStatus.waiting_on_manual_approval:
           return const Color(0xFFFFB300);
+        case TransactionStatus.transaction_approved:
+          return const Color(0xFF1976D2);
         case TransactionStatus.payment_declined:
         case TransactionStatus.transaction_disapproved:
           return const Color(0xFFD32F2F);
@@ -300,13 +327,18 @@ class TransactionListItem extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(transaction.category.name.toUpperCase(), style: context.textStyles.bodyMedium?.semiBold),
+                  Text(transaction.category.name.toUpperCase(),
+                      style: context.textStyles.bodyMedium?.semiBold),
                   SizedBox(height: AppSpacing.xs),
-                  Text(dateFormat.format(transaction.createdAt), style: context.textStyles.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                  Text(dateFormat.format(transaction.createdAt),
+                      style: context.textStyles.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant)),
                 ],
               ),
             ),
-            Text('₹${transaction.amount.toStringAsFixed(2)}', style: context.textStyles.titleMedium?.bold?.copyWith(color: theme.colorScheme.primary)),
+            Text('₹${transaction.amount.toStringAsFixed(2)}',
+                style: context.textStyles.titleMedium?.bold
+                    ?.copyWith(color: theme.colorScheme.primary)),
           ],
         ),
       ),
@@ -337,9 +369,14 @@ class EmptyStateWidget extends StatelessWidget {
           children: [
             Icon(icon, size: 64, color: theme.colorScheme.onSurfaceVariant),
             SizedBox(height: AppSpacing.md),
-            Text(title, style: context.textStyles.titleMedium?.semiBold, textAlign: TextAlign.center),
+            Text(title,
+                style: context.textStyles.titleMedium?.semiBold,
+                textAlign: TextAlign.center),
             SizedBox(height: AppSpacing.sm),
-            Text(subtitle, style: context.textStyles.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant), textAlign: TextAlign.center),
+            Text(subtitle,
+                style: context.textStyles.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                textAlign: TextAlign.center),
           ],
         ),
       ),

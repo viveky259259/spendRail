@@ -9,13 +9,14 @@ import 'package:spendrail_worker_app/services/auth_service.dart';
 import 'package:spendrail_worker_app/services/payment_service.dart';
 import 'package:spendrail_worker_app/theme.dart';
 
-final allTransactionsProvider = FutureProvider<List<TransactionModel>>((ref) async {
+final allTransactionsProvider =
+    FutureProvider<List<TransactionModel>>((ref) async {
   final authService = ref.watch(authServiceProvider);
   final paymentService = ref.watch(paymentServiceProvider);
   final userId = authService.currentUser?.uid;
-  
+
   if (userId == null) return [];
-  
+
   return await paymentService.getUserTransactions(userId);
 });
 
@@ -68,14 +69,17 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                     controller: _searchController,
                     decoration: InputDecoration(
                       labelText: l10n.translate('search'),
-                      prefixIcon: Icon(Icons.search, color: theme.colorScheme.primary),
-                      suffixIcon: _searchQuery.isNotEmpty ? IconButton(
-                        icon: const Icon(Icons.clear),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      ) : null,
+                      prefixIcon:
+                          Icon(Icons.search, color: theme.colorScheme.primary),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
                     ),
                     onChanged: (value) => setState(() => _searchQuery = value),
                   ),
@@ -87,17 +91,20 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                         FilterChip(
                           label: Text('All'),
                           selected: _selectedCategory == null,
-                          onSelected: (selected) => setState(() => _selectedCategory = null),
+                          onSelected: (selected) =>
+                              setState(() => _selectedCategory = null),
                         ),
                         SizedBox(width: AppSpacing.sm),
                         ...TransactionCategory.values.map((category) => Padding(
-                          padding: EdgeInsets.only(right: AppSpacing.sm),
-                          child: FilterChip(
-                            label: Text(category.name.toUpperCase()),
-                            selected: _selectedCategory == category,
-                            onSelected: (selected) => setState(() => _selectedCategory = selected ? category : null),
-                          ),
-                        )),
+                              padding: EdgeInsets.only(right: AppSpacing.sm),
+                              child: FilterChip(
+                                label: Text(category.name.toUpperCase()),
+                                selected: _selectedCategory == category,
+                                onSelected: (selected) => setState(() =>
+                                    _selectedCategory =
+                                        selected ? category : null),
+                              ),
+                            )),
                       ],
                     ),
                   ),
@@ -107,16 +114,20 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
             Expanded(
               child: transactionsAsync.when(
                 data: (transactions) {
-                  final filteredTransactions = _filterTransactions(transactions);
-                  
+                  final filteredTransactions =
+                      _filterTransactions(transactions);
+
                   if (filteredTransactions.isEmpty) {
                     return Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.search_off, size: 64, color: theme.colorScheme.onSurfaceVariant),
+                          Icon(Icons.search_off,
+                              size: 64,
+                              color: theme.colorScheme.onSurfaceVariant),
                           SizedBox(height: AppSpacing.md),
-                          Text('No transactions found', style: context.textStyles.titleMedium?.semiBold),
+                          Text('No transactions found',
+                              style: context.textStyles.titleMedium?.semiBold),
                         ],
                       ),
                     );
@@ -125,7 +136,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                   return ListView.builder(
                     padding: AppSpacing.paddingLg,
                     itemCount: filteredTransactions.length,
-                    itemBuilder: (context, index) => TransactionCard(transaction: filteredTransactions[index]),
+                    itemBuilder: (context, index) => TransactionCard(
+                        transaction: filteredTransactions[index]),
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
@@ -138,14 +150,16 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
     );
   }
 
-  List<TransactionModel> _filterTransactions(List<TransactionModel> transactions) {
+  List<TransactionModel> _filterTransactions(
+      List<TransactionModel> transactions) {
     return transactions.where((t) {
-      final matchesSearch = _searchQuery.isEmpty || 
-        t.qrData.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-        (t.note?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
-      
-      final matchesCategory = _selectedCategory == null || t.category == _selectedCategory;
-      
+      final matchesSearch = _searchQuery.isEmpty ||
+          t.qrData.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          (t.note?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
+
+      final matchesCategory =
+          _selectedCategory == null || t.category == _selectedCategory;
+
       return matchesSearch && matchesCategory;
     }).toList();
   }
@@ -153,11 +167,13 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
   void _exportReport(List<TransactionModel> transactions) {
     final analyticsService = AnalyticsService();
     final csv = analyticsService.exportToCSV(transactions);
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Report exported (${transactions.length} transactions)')),
+      SnackBar(
+          content:
+              Text('Report exported (${transactions.length} transactions)')),
     );
-    
+
     debugPrint('CSV Export:\n$csv');
   }
 }
@@ -180,6 +196,8 @@ class TransactionCard extends StatelessWidget {
         case TransactionStatus.waiting_on_approval:
         case TransactionStatus.waiting_on_manual_approval:
           return const Color(0xFFFFB300);
+        case TransactionStatus.transaction_approved:
+          return const Color(0xFF1976D2);
         case TransactionStatus.payment_declined:
         case TransactionStatus.transaction_disapproved:
         case TransactionStatus.payment_in_progress:
@@ -217,31 +235,42 @@ class TransactionCard extends StatelessWidget {
                     color: theme.colorScheme.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(getCategoryIcon(), color: theme.colorScheme.primary),
+                  child:
+                      Icon(getCategoryIcon(), color: theme.colorScheme.primary),
                 ),
                 SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(transaction.category.name.toUpperCase(), style: context.textStyles.bodyLarge?.semiBold),
+                      Text(transaction.category.name.toUpperCase(),
+                          style: context.textStyles.bodyLarge?.semiBold),
                       SizedBox(height: AppSpacing.xs),
                       Row(
                         children: [
-                          Icon(Icons.access_time, size: 14, color: theme.colorScheme.onSurfaceVariant),
+                          Icon(Icons.access_time,
+                              size: 14,
+                              color: theme.colorScheme.onSurfaceVariant),
                           SizedBox(width: AppSpacing.xs),
-                          Text('${dateFormat.format(transaction.createdAt)} at ${timeFormat.format(transaction.createdAt)}', style: context.textStyles.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                          Text(
+                              '${dateFormat.format(transaction.createdAt)} at ${timeFormat.format(transaction.createdAt)}',
+                              style: context.textStyles.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant)),
                         ],
                       ),
                     ],
                   ),
                 ),
-                Text('₹${transaction.amount.toStringAsFixed(2)}', style: context.textStyles.titleMedium?.bold?.copyWith(color: theme.colorScheme.primary)),
+                Text('₹${transaction.amount.toStringAsFixed(2)}',
+                    style: context.textStyles.titleMedium?.bold
+                        ?.copyWith(color: theme.colorScheme.primary)),
               ],
             ),
             if (transaction.note != null) ...[
               SizedBox(height: AppSpacing.md),
-              Text(transaction.note!, style: context.textStyles.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              Text(transaction.note!,
+                  style: context.textStyles.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             ],
             SizedBox(height: AppSpacing.md),
             Container(
@@ -250,7 +279,9 @@ class TransactionCard extends StatelessWidget {
                 color: getStatusColor().withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Text(transaction.status.name.toUpperCase(), style: context.textStyles.labelSmall?.copyWith(color: getStatusColor(), fontWeight: FontWeight.bold)),
+              child: Text(transaction.status.name.toUpperCase(),
+                  style: context.textStyles.labelSmall?.copyWith(
+                      color: getStatusColor(), fontWeight: FontWeight.bold)),
             ),
           ],
         ),
