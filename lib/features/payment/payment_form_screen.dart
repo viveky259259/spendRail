@@ -6,6 +6,8 @@ import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:image_picker/image_picker.dart';
 import 'package:spendrail_worker_app/l10n/app_localizations.dart';
 import 'package:spendrail_worker_app/services/auth_service.dart';
 import 'package:spendrail_worker_app/services/payment_service.dart';
@@ -221,17 +223,107 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
         }
       }
 
+      final amount = double.parse(_amountController.text);
+
       final firebaseId = await paymentService.initiatePayment(
         userId: userId,
-        amount: double.parse(_amountController.text),
+        amount: amount,
         qrData: widget.qrData,
         note: _noteController.text.isEmpty ? null : _noteController.text,
         voiceNoteUrl: voiceNoteUrl,
       );
 
-      if (mounted) {
-        context.go('/payment-processing', extra: firebaseId);
+      // If amount > 200, ask user to upload invoice image now (optional)
+      if (amount > 200) {
+        if (mounted) {
+          final theme = Theme.of(context);
+          final action = await showModalBottomSheet<String>(
+            context: context,
+            showDragHandle: true,
+            builder: (ctx) => Padding(
+              padding: AppSpacing.paddingLg,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Invoice required for amounts above ₹200',
+                      style: context.textStyles.titleMedium?.semiBold),
+                  SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Upload your purchase invoice now or do it later from History.',
+                    style: context.textStyles.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                  SizedBox(height: AppSpacing.lg),
+                  FilledButton.icon(
+                    onPressed: () => Navigator.of(ctx).pop('upload'),
+                    icon: Icon(Icons.upload_file,
+                        color: theme.colorScheme.onPrimary),
+                    label: Text('Upload invoice now'),
+                  ),
+                  SizedBox(height: AppSpacing.sm),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.of(ctx).pop('skip'),
+                    icon: Icon(Icons.schedule, color: theme.colorScheme.primary),
+                    label: Text('Do it later'),
+                  ),
+                ],
+              ),
+            ),
+          );
+
+          if (action == 'upload') {
+            try {
+              final picker = ImagePicker();
+              final image = await picker.pickImage(
+                source: ImageSource.gallery,
+                maxWidth: 1920,
+                imageQuality: 85,
+              );
+              if (image != null) {
+                // Show a quick loading dialog while uploading
+                if (mounted) {
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (_) => const Center(child: CircularProgressIndicator()),
+                  );
+                }
+                try {
+                  final bytes = await image.readAsBytes();
+                  await paymentService.uploadInvoiceAndCategorize(
+                    firebaseId: firebaseId,
+                    userId: userId,
+                    data: bytes,
+                    filename: image.name,
+                  );
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Invoice uploaded successfully')),
+                    );
+                  }
+                } catch (e) {
+                  debugPrint('Invoice upload from form failed: $e');
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Invoice upload failed. You can upload from History.'),
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                    );
+                  }
+                } finally {
+                  if (mounted) Navigator.of(context, rootNavigator: true).pop();
+                }
+              }
+            } catch (e) {
+              debugPrint('Image pick failed: $e');
+            }
+          }
+        }
       }
+
+      if (mounted) context.go('/payment-processing', extra: firebaseId);
     } catch (e) {
       debugPrint('Payment submission error: $e');
       if (mounted) {

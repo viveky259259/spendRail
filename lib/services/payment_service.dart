@@ -5,6 +5,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:spendrail_worker_app/models/transaction_model.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:typed_data';
 
 class PaymentService {
   final http.Client _client = http.Client();
@@ -16,10 +18,12 @@ class PaymentService {
   static const Duration _requestTimeout = Duration(seconds: 20);
 
   void _logHttpFailure(String context, http.Response response,
-      {Object? payload}) {
+      {Object? payload, String? url}) {
     try {
       debugPrint('[API ERROR] $context');
-      debugPrint('  → POST $_apiBaseUrl/firebase/validate');
+      if (url != null) {
+        debugPrint('  → URL: $url');
+      }
       if (payload != null) debugPrint('  Payload: $payload');
       debugPrint('  Status: ${response.statusCode}');
       debugPrint('  Response body: ${response.body}');
@@ -59,9 +63,10 @@ class PaymentService {
 
       // Step 2: Call SpendRail API to trigger spend approval using firebaseId
       try {
+        final url = '$_apiBaseUrl/firebase/validate';
         final response = await _client
             .post(
-              Uri.parse('$_apiBaseUrl/firebase/validate'),
+              Uri.parse(url),
               headers: {'Content-Type': 'application/json'},
               body: jsonEncode({'firebase_id': firebaseId}),
             )
@@ -69,7 +74,7 @@ class PaymentService {
 
         if (response.statusCode != 200) {
           _logHttpFailure('Spend approval API call failed', response,
-              payload: {'firebaseId': firebaseId});
+              payload: {'firebaseId': firebaseId}, url: url);
           throw Exception('Spend approval request failed');
         }
       } on TimeoutException {
@@ -84,6 +89,78 @@ class PaymentService {
       return firebaseId;
     } catch (e) {
       debugPrint('Payment initiation error: $e');
+      rethrow;
+    }
+  }
+
+  /// Uploads an invoice image to Firebase Storage, updates the Firestore transaction
+  /// document with the invoiceUrl, and then calls the SpendRail categorize endpoint.
+  /// Returns the uploaded invoice URL when successful.
+  Future<String?> uploadInvoiceAndCategorize({
+    required String firebaseId,
+    required String userId,
+    required Uint8List data,
+    required String filename,
+  }) async {
+    try {
+      // Determine extension and content type
+      final lower = filename.toLowerCase();
+      String ext = '.jpg';
+      String contentType = 'image/jpeg';
+      if (lower.endsWith('.png')) {
+        ext = '.png';
+        contentType = 'image/png';
+      } else if (lower.endsWith('.jpeg') || lower.endsWith('.jpg')) {
+        ext = '.jpg';
+        contentType = 'image/jpeg';
+      } else if (lower.endsWith('.webp')) {
+        ext = '.webp';
+        contentType = 'image/webp';
+      }
+
+      // Upload to Storage
+      final stamp = DateTime.now().millisecondsSinceEpoch;
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('invoices/$userId/${firebaseId}_$stamp$ext');
+
+      final task = await storageRef.putData(
+        data,
+        SettableMetadata(contentType: contentType),
+      );
+      final invoiceUrl = await task.ref.getDownloadURL();
+
+      // Update transaction document
+      await _firestore.collection('transactions').doc(firebaseId).update({
+        'invoiceUrl': invoiceUrl,
+        'updatedAt': Timestamp.fromDate(DateTime.now()),
+      });
+
+      // Call categorize endpoint (URL provided by user)
+      final categorizeUrl =
+          'https://spendrail.onrender.com/api/v1/api/v1/images/categorize/firebase';
+      try {
+        final response = await _client
+            .post(
+              Uri.parse(categorizeUrl),
+              headers: {'Content-Type': 'application/json', 'accept': 'application/json'},
+              body: jsonEncode({'firebase_id': firebaseId}),
+            )
+            .timeout(_requestTimeout);
+
+        if (response.statusCode != 200) {
+          _logHttpFailure('Invoice categorize API call failed', response,
+              payload: {'firebaseId': firebaseId}, url: categorizeUrl);
+        }
+      } on TimeoutException {
+        debugPrint('Invoice categorize API timeout');
+      } catch (e) {
+        debugPrint('Invoice categorize API unexpected error: $e');
+      }
+
+      return invoiceUrl;
+    } catch (e) {
+      debugPrint('uploadInvoiceAndCategorize error: $e');
       rethrow;
     }
   }

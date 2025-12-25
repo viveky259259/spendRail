@@ -8,6 +8,8 @@ import 'package:spendrail_worker_app/services/analytics_service.dart';
 import 'package:spendrail_worker_app/services/auth_service.dart';
 import 'package:spendrail_worker_app/services/payment_service.dart';
 import 'package:spendrail_worker_app/theme.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:typed_data';
 
 final allTransactionsProvider =
     FutureProvider<List<TransactionModel>>((ref) async {
@@ -137,7 +139,8 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
                     padding: AppSpacing.paddingLg,
                     itemCount: filteredTransactions.length,
                     itemBuilder: (context, index) => TransactionCard(
-                        transaction: filteredTransactions[index]),
+                        transaction: filteredTransactions[index],
+                        onUploadInvoice: (t) => _handleUploadInvoice(t)),
                   );
                 },
                 loading: () => const Center(child: CircularProgressIndicator()),
@@ -148,6 +151,60 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _handleUploadInvoice(TransactionModel t) async {
+    try {
+      final authService = ref.read(authServiceProvider);
+      final paymentService = ref.read(paymentServiceProvider);
+      final userId = authService.currentUser?.uid;
+      if (userId == null) return;
+
+      final picker = ImagePicker();
+      final image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        imageQuality: 85,
+      );
+      if (image == null) return;
+
+      // Show simple progress dialog while uploading
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const Center(child: CircularProgressIndicator()),
+        );
+      }
+
+      try {
+        final bytes = await image.readAsBytes();
+        await paymentService.uploadInvoiceAndCategorize(
+          firebaseId: t.id,
+          userId: userId,
+          data: bytes,
+          filename: image.name,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(const SnackBar(content: Text('Invoice uploaded')));
+        }
+        // Refresh list
+        ref.invalidate(allTransactionsProvider);
+      } catch (e) {
+        debugPrint('History invoice upload failed: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Upload failed: ${e.toString()}'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ));
+        }
+      } finally {
+        if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      }
+    } catch (e) {
+      debugPrint('handleUploadInvoice error: $e');
+    }
   }
 
   List<TransactionModel> _filterTransactions(
@@ -180,8 +237,9 @@ class _HistoryScreenState extends ConsumerState<HistoryScreen> {
 
 class TransactionCard extends StatelessWidget {
   final TransactionModel transaction;
+  final void Function(TransactionModel transaction)? onUploadInvoice;
 
-  const TransactionCard({super.key, required this.transaction});
+  const TransactionCard({super.key, required this.transaction, this.onUploadInvoice});
 
   @override
   Widget build(BuildContext context) {
@@ -283,6 +341,14 @@ class TransactionCard extends StatelessWidget {
                   style: context.textStyles.labelSmall?.copyWith(
                       color: getStatusColor(), fontWeight: FontWeight.bold)),
             ),
+            if (transaction.amount > 200 && (transaction.invoiceUrl == null || transaction.invoiceUrl!.isEmpty)) ...[
+              SizedBox(height: AppSpacing.md),
+              OutlinedButton.icon(
+                onPressed: onUploadInvoice == null ? null : () => onUploadInvoice!(transaction),
+                icon: Icon(Icons.upload_rounded, color: Theme.of(context).colorScheme.primary),
+                label: const Text('Upload invoice'),
+              ),
+            ],
           ],
         ),
       ),

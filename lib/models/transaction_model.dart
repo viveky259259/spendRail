@@ -22,6 +22,7 @@ class TransactionModel {
   final String qrData;
   final String? note;
   final String? voiceNoteUrl;
+  final String? invoiceUrl;
   final TransactionStatus status;
   final TransactionCategory category;
   final DateTime createdAt;
@@ -34,6 +35,7 @@ class TransactionModel {
     required this.qrData,
     this.note,
     this.voiceNoteUrl,
+    this.invoiceUrl,
     this.status = TransactionStatus.waiting_on_approval,
     this.category = TransactionCategory.other,
     required this.createdAt,
@@ -47,6 +49,7 @@ class TransactionModel {
     qrData: json['qrData'] as String,
     note: json['note'] as String?,
     voiceNoteUrl: json['voiceNoteUrl'] as String?,
+    invoiceUrl: json['invoiceUrl'] as String?,
     status: _parseStatus(json['status'] as String?),
     category: TransactionCategory.values.firstWhere(
       (e) => e.name == json['category'],
@@ -63,6 +66,7 @@ class TransactionModel {
     'qrData': qrData,
     'note': note,
     'voiceNoteUrl': voiceNoteUrl,
+    'invoiceUrl': invoiceUrl,
     'status': status.name,
     'category': category.name,
     'createdAt': Timestamp.fromDate(createdAt),
@@ -76,6 +80,7 @@ class TransactionModel {
     String? qrData,
     String? note,
     String? voiceNoteUrl,
+    String? invoiceUrl,
     TransactionStatus? status,
     TransactionCategory? category,
     DateTime? createdAt,
@@ -87,6 +92,7 @@ class TransactionModel {
     qrData: qrData ?? this.qrData,
     note: note ?? this.note,
     voiceNoteUrl: voiceNoteUrl ?? this.voiceNoteUrl,
+    invoiceUrl: invoiceUrl ?? this.invoiceUrl,
     status: status ?? this.status,
     category: category ?? this.category,
     createdAt: createdAt ?? this.createdAt,
