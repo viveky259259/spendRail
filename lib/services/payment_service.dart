@@ -138,12 +138,15 @@ class PaymentService {
 
       // Call categorize endpoint (URL provided by user)
       final categorizeUrl =
-          'https://spendrail.onrender.com/api/v1/api/v1/images/categorize/firebase';
+          'https://spendrail.onrender.com/api/v1/images/categorize/firebase';
       try {
         final response = await _client
             .post(
               Uri.parse(categorizeUrl),
-              headers: {'Content-Type': 'application/json', 'accept': 'application/json'},
+              headers: {
+                'Content-Type': 'application/json',
+                'accept': 'application/json'
+              },
               body: jsonEncode({'firebase_id': firebaseId}),
             )
             .timeout(_requestTimeout);
@@ -236,7 +239,8 @@ class PaymentService {
   }
 
   /// Update the status of a transaction in Firebase (for mock payment processing)
-  Future<void> updateTransactionStatus(String firebaseId, TransactionStatus status) async {
+  Future<void> updateTransactionStatus(
+      String firebaseId, TransactionStatus status) async {
     try {
       await _firestore.collection('transactions').doc(firebaseId).update({
         'status': status.name,
