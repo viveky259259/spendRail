@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -34,8 +35,17 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
 
+  // Stream subscriptions for audio player
+  StreamSubscription<PlayerState>? _playerStateSubscription;
+  StreamSubscription<Duration>? _durationSubscription;
+  StreamSubscription<Duration>? _positionSubscription;
+
   @override
   void dispose() {
+    // Cancel stream subscriptions to prevent setState after dispose
+    _playerStateSubscription?.cancel();
+    _durationSubscription?.cancel();
+    _positionSubscription?.cancel();
     _amountController.dispose();
     _noteController.dispose();
     _audioRecorder.dispose();
@@ -48,15 +58,16 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
     super.initState();
     _parseUpiData(widget.qrData);
     _audioPlayer = AudioPlayer();
-    // Listen to audio player state and durations
-    _audioPlayer.onPlayerStateChanged.listen((state) {
-      setState(() => _isPlaying = state == PlayerState.playing);
+    // Listen to audio player state and durations with proper subscription management
+    _playerStateSubscription =
+        _audioPlayer.onPlayerStateChanged.listen((state) {
+      if (mounted) setState(() => _isPlaying = state == PlayerState.playing);
     });
-    _audioPlayer.onDurationChanged.listen((d) {
-      setState(() => _duration = d);
+    _durationSubscription = _audioPlayer.onDurationChanged.listen((d) {
+      if (mounted) setState(() => _duration = d);
     });
-    _audioPlayer.onPositionChanged.listen((p) {
-      setState(() => _position = p);
+    _positionSubscription = _audioPlayer.onPositionChanged.listen((p) {
+      if (mounted) setState(() => _position = p);
     });
   }
 
@@ -112,8 +123,13 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
     } else {
       if (await _audioRecorder.hasPermission()) {
         // Stop any currently playing audio before starting a new recording
-        try { await _audioPlayer.stop(); } catch (e) { debugPrint('Audio stop before recording failed: $e'); }
-        await _audioRecorder.start(const RecordConfig(), path: 'voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a');
+        try {
+          await _audioPlayer.stop();
+        } catch (e) {
+          debugPrint('Audio stop before recording failed: $e');
+        }
+        await _audioRecorder.start(const RecordConfig(),
+            path: 'voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a');
         setState(() => _isRecording = true);
       }
     }
@@ -135,7 +151,9 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
       debugPrint('Audio play/pause error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Unable to play voice note'), backgroundColor: Theme.of(context).colorScheme.error),
+          SnackBar(
+              content: Text('Unable to play voice note'),
+              backgroundColor: Theme.of(context).colorScheme.error),
         );
       }
     }
@@ -160,7 +178,11 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
         });
       }
       if (_isPlaying) {
-        try { await _audioPlayer.stop(); } catch (e) { debugPrint('Audio stop before submit failed: $e'); }
+        try {
+          await _audioPlayer.stop();
+        } catch (e) {
+          debugPrint('Audio stop before submit failed: $e');
+        }
       }
     } catch (e) {
       debugPrint('Failed to finalize audio before submit: $e');
@@ -186,9 +208,8 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
           final contentType = ext == 'm4a'
               ? 'audio/m4a'
               : (ext == 'aac' ? 'audio/aac' : 'audio/mp4');
-          final ref = FirebaseStorage.instance
-              .ref()
-              .child('voice_notes/$userId/${DateTime.now().millisecondsSinceEpoch}.$ext');
+          final ref = FirebaseStorage.instance.ref().child(
+              'voice_notes/$userId/${DateTime.now().millisecondsSinceEpoch}.$ext');
           final uploadTask = await ref.putFile(
             file,
             SettableMetadata(contentType: contentType),
@@ -215,7 +236,9 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
       debugPrint('Payment submission error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Payment failed: ${e.toString()}'), backgroundColor: Theme.of(context).colorScheme.error),
+          SnackBar(
+              content: Text('Payment failed: ${e.toString()}'),
+              backgroundColor: Theme.of(context).colorScheme.error),
         );
         setState(() => _isLoading = false);
       }
@@ -248,20 +271,25 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                     padding: AppSpacing.paddingLg,
                     child: Column(
                       children: [
-                        Icon(Icons.qr_code_2, size: 64, color: theme.colorScheme.primary),
+                        Icon(Icons.qr_code_2,
+                            size: 64, color: theme.colorScheme.primary),
                         SizedBox(height: AppSpacing.md),
-                        Text('QR Code Scanned', style: context.textStyles.titleMedium?.semiBold),
+                        Text('QR Code Scanned',
+                            style: context.textStyles.titleMedium?.semiBold),
                         SizedBox(height: AppSpacing.sm),
                         if (_vpa != null && _vpa!.isNotEmpty) ...[
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.alternate_email, size: 18, color: theme.colorScheme.primary),
+                              Icon(Icons.alternate_email,
+                                  size: 18, color: theme.colorScheme.primary),
                               SizedBox(width: AppSpacing.xs),
                               Flexible(
                                 child: Text(
                                   _vpa!,
-                                  style: context.textStyles.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+                                  style: context.textStyles.bodyMedium
+                                      ?.copyWith(
+                                          color: theme.colorScheme.onSurface),
                                   textAlign: TextAlign.center,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -273,7 +301,8 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                             SizedBox(height: AppSpacing.xs),
                             Text(
                               _payeeName!,
-                              style: context.textStyles.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                              style: context.textStyles.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant),
                               textAlign: TextAlign.center,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -282,7 +311,8 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                         ] else ...[
                           Text(
                             widget.qrData,
-                            style: context.textStyles.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                            style: context.textStyles.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant),
                             textAlign: TextAlign.center,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -297,14 +327,17 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                   controller: _amountController,
                   decoration: InputDecoration(
                     labelText: l10n.translate('amount'),
-                    prefixIcon: Icon(Icons.currency_rupee, color: theme.colorScheme.primary),
+                    prefixIcon: Icon(Icons.currency_rupee,
+                        color: theme.colorScheme.primary),
                     hintText: '0.00',
                   ),
                   keyboardType: TextInputType.number,
                   validator: (value) {
-                    if (value == null || value.isEmpty) return 'Please enter amount';
+                    if (value == null || value.isEmpty)
+                      return 'Please enter amount';
                     final amount = double.tryParse(value);
-                    if (amount == null || amount <= 0) return 'Please enter valid amount';
+                    if (amount == null || amount <= 0)
+                      return 'Please enter valid amount';
                     return null;
                   },
                 ),
@@ -313,7 +346,8 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                   controller: _noteController,
                   decoration: InputDecoration(
                     labelText: l10n.translate('note'),
-                    prefixIcon: Icon(Icons.note_outlined, color: theme.colorScheme.primary),
+                    prefixIcon: Icon(Icons.note_outlined,
+                        color: theme.colorScheme.primary),
                     hintText: 'Optional',
                   ),
                   maxLines: 3,
@@ -321,11 +355,24 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                 SizedBox(height: AppSpacing.md),
                 OutlinedButton.icon(
                   onPressed: _isLoading ? null : _toggleRecording,
-                  icon: Icon(_isRecording ? Icons.stop : Icons.mic, color: _isRecording ? theme.colorScheme.error : theme.colorScheme.primary),
-                  label: Text(_isRecording ? 'Stop Recording' : (_voiceNotePath != null ? 'Voice Note Recorded' : l10n.translate('record_voice'))),
+                  icon: Icon(_isRecording ? Icons.stop : Icons.mic,
+                      color: _isRecording
+                          ? theme.colorScheme.error
+                          : theme.colorScheme.primary),
+                  label: Text(_isRecording
+                      ? 'Stop Recording'
+                      : (_voiceNotePath != null
+                          ? 'Voice Note Recorded'
+                          : l10n.translate('record_voice'))),
                   style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: _isRecording ? theme.colorScheme.error : theme.colorScheme.primary, width: 2),
-                    foregroundColor: _isRecording ? theme.colorScheme.error : theme.colorScheme.primary,
+                    side: BorderSide(
+                        color: _isRecording
+                            ? theme.colorScheme.error
+                            : theme.colorScheme.primary,
+                        width: 2),
+                    foregroundColor: _isRecording
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.primary,
                   ),
                 ),
                 if (_voiceNotePath != null)
@@ -339,7 +386,12 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                           children: [
                             IconButton(
                               onPressed: _togglePlayPause,
-                              icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill, color: theme.colorScheme.primary, size: 32),
+                              icon: Icon(
+                                  _isPlaying
+                                      ? Icons.pause_circle_filled
+                                      : Icons.play_circle_fill,
+                                  color: theme.colorScheme.primary,
+                                  size: 32),
                               tooltip: _isPlaying ? 'Pause' : 'Play',
                             ),
                             SizedBox(width: AppSpacing.sm),
@@ -347,21 +399,39 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('Voice note', style: context.textStyles.bodyMedium?.semiBold),
+                                  Text('Voice note',
+                                      style: context
+                                          .textStyles.bodyMedium?.semiBold),
                                   SizedBox(height: 2),
-                                  Text('${_formatDuration(_position)} / ${_formatDuration(_duration)}', style: context.textStyles.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                                  Text(
+                                      '${_formatDuration(_position)} / ${_formatDuration(_duration)}',
+                                      style: context.textStyles.labelSmall
+                                          ?.copyWith(
+                                              color: theme.colorScheme
+                                                  .onSurfaceVariant)),
                                 ],
                               ),
                             ),
-                            if (_position > Duration.zero && _duration > Duration.zero)
+                            if (_position > Duration.zero &&
+                                _duration > Duration.zero)
                               SizedBox(
                                 width: 120,
                                 child: Slider(
-                                  value: _position.inMilliseconds.clamp(0, _duration.inMilliseconds).toDouble(),
-                                  max: (_duration.inMilliseconds == 0 ? 1 : _duration.inMilliseconds).toDouble(),
+                                  value: _position.inMilliseconds
+                                      .clamp(0, _duration.inMilliseconds)
+                                      .toDouble(),
+                                  max: (_duration.inMilliseconds == 0
+                                          ? 1
+                                          : _duration.inMilliseconds)
+                                      .toDouble(),
                                   onChanged: (v) async {
-                                    final newPos = Duration(milliseconds: v.round());
-                                    try { await _audioPlayer.seek(newPos); } catch (e) { debugPrint('Seek error: $e'); }
+                                    final newPos =
+                                        Duration(milliseconds: v.round());
+                                    try {
+                                      await _audioPlayer.seek(newPos);
+                                    } catch (e) {
+                                      debugPrint('Seek error: $e');
+                                    }
                                   },
                                 ),
                               ),
@@ -374,8 +444,13 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                 ElevatedButton(
                   onPressed: _isLoading ? null : _submitPayment,
                   child: _isLoading
-                    ? SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.onPrimary))
-                    : Text(l10n.translate('submit')),
+                      ? SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: theme.colorScheme.onPrimary))
+                      : Text(l10n.translate('submit')),
                 ),
               ],
             ),

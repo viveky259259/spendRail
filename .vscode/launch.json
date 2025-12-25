@@ -1,0 +1,43 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+    
+        {
+            "name": "spendRail",
+            "request": "launch",
+            "type": "dart"
+        },
+        {
+            "name": "spendRail (profile mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "profile"
+        },
+        {
+            "name": "spendRail (release mode)",
+            "request": "launch",
+            "type": "dart",
+            "flutterMode": "release"
+        },
+        {
+            "name": "spendRail (iOS Simulator)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "5187CB15-B0F8-466E-91F6-902B420EF14F"
+        },
+        {
+            "name": "spendRail (Web - Chrome)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "chrome",
+            "args": [
+                "--web-browser-flag=--disable-web-security",
+                "--web-browser-flag=--user-data-dir=/tmp/flutter-chrome-dev",
+                "--web-port=4449"
+            ]
+        }
+    ]
+}

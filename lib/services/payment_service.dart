@@ -1,43 +1,33 @@
 import 'dart:async';
-import 'package:dio/dio.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:spendrail_worker_app/models/transaction_model.dart';
 
 class PaymentService {
-  final Dio _dio = Dio(
-    BaseOptions(
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 20),
-      sendTimeout: const Duration(seconds: 20),
-      headers: {'Content-Type': 'application/json'},
-    ),
-  );
+  final http.Client _client = http.Client();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  
+
   // SpendRail backend base (provided by user)
   static const String _apiBaseUrl = 'https://spendrail.onrender.com/api/v1';
   static const Duration _paymentTimeout = Duration(minutes: 5);
+  static const Duration _requestTimeout = Duration(seconds: 20);
 
-  void _logDioFailure(String context, DioException e, {Object? payload}) {
+  void _logHttpFailure(String context, http.Response response,
+      {Object? payload}) {
     try {
-      final req = e.requestOptions;
-      final res = e.response;
       debugPrint('[API ERROR] $context');
-      debugPrint('  → ${req.method} ${req.baseUrl.isNotEmpty ? req.baseUrl : ''}${req.path}');
+      debugPrint('  → POST $_apiBaseUrl/firebase/validate');
       if (payload != null) debugPrint('  Payload: $payload');
-      debugPrint('  DioException.type: ${e.type}');
-      if (e.message != null) debugPrint('  Message: ${e.message}');
-      if (res != null) {
-        debugPrint('  Status: ${res.statusCode}');
-        debugPrint('  Response data: ${res.data}');
-      }
+      debugPrint('  Status: ${response.statusCode}');
+      debugPrint('  Response body: ${response.body}');
     } catch (logErr) {
       debugPrint('Failed to log API error: $logErr');
     }
   }
-  
+
   Future<String> initiatePayment({
     required String userId,
     required double amount,
@@ -69,19 +59,21 @@ class PaymentService {
 
       // Step 2: Call SpendRail API to trigger spend approval using firebaseId
       try {
-        final response = await _dio.post(
-          '$_apiBaseUrl/transcationApproval',
-          data: {'firebaseId': firebaseId},
-        );
+        final response = await _client
+            .post(
+              Uri.parse('$_apiBaseUrl/firebase/validate'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({'firebase_id': firebaseId}),
+            )
+            .timeout(_requestTimeout);
 
         if (response.statusCode != 200) {
-          debugPrint('[API FAILURE] POST $_apiBaseUrl/transcationApproval');
-          debugPrint('  Status: ${response.statusCode}');
-          debugPrint('  Body: ${response.data}');
+          _logHttpFailure('Spend approval API call failed', response,
+              payload: {'firebaseId': firebaseId});
           throw Exception('Spend approval request failed');
         }
-      } on DioException catch (e) {
-        _logDioFailure('Spend approval API call failed', e, payload: {'firebaseId': firebaseId});
+      } on TimeoutException {
+        debugPrint('Spend approval API timeout');
         rethrow;
       } catch (e) {
         debugPrint('Spend approval API unexpected error: $e');
@@ -95,13 +87,18 @@ class PaymentService {
       rethrow;
     }
   }
-  
+
   Stream<TransactionModel> listenToTransaction(String firebaseId) {
-    return _firestore.collection('transactions').doc(firebaseId).snapshots().map((snapshot) {
+    return _firestore
+        .collection('transactions')
+        .doc(firebaseId)
+        .snapshots()
+        .map((snapshot) {
       if (!snapshot.exists) {
         throw Exception('Transaction not found');
       }
-      return TransactionModel.fromJson({...snapshot.data()!, 'id': snapshot.id});
+      return TransactionModel.fromJson(
+          {...snapshot.data()!, 'id': snapshot.id});
     }).timeout(
       _paymentTimeout,
       onTimeout: (sink) {
@@ -109,12 +106,12 @@ class PaymentService {
       },
     );
   }
-  
+
   Future<TransactionModel> waitForPaymentCompletion(String firebaseId) async {
     try {
       final completer = Completer<TransactionModel>();
       StreamSubscription? subscription;
-      
+
       subscription = listenToTransaction(firebaseId).listen(
         (transaction) {
           if (transaction.status == TransactionStatus.payment_completed ||
@@ -133,32 +130,47 @@ class PaymentService {
           }
         },
       );
-      
+
       return await completer.future;
     } catch (e) {
       debugPrint('Payment completion error: $e');
       rethrow;
     }
   }
-  
-  Future<List<TransactionModel>> getUserTransactions(String userId, {int limit = 50}) async {
+
+  Future<List<TransactionModel>> getUserTransactions(String userId,
+      {int limit = 50}) async {
     try {
       final snapshot = await _firestore
-        .collection('transactions')
-        .where('userId', isEqualTo: userId)
-        .orderBy('createdAt', descending: true)
-        .limit(limit)
-        .get();
-      
+          .collection('transactions')
+          .where('userId', isEqualTo: userId)
+          .orderBy('createdAt', descending: true)
+          .limit(limit)
+          .get();
+
       return snapshot.docs
-        .map((doc) => TransactionModel.fromJson({...doc.data(), 'id': doc.id}))
-        .toList();
+          .map(
+              (doc) => TransactionModel.fromJson({...doc.data(), 'id': doc.id}))
+          .toList();
     } catch (e) {
       debugPrint('Get transactions error: $e');
       return [];
     }
   }
-  
+
+  /// Update the status of a transaction in Firebase (for mock payment processing)
+  Future<void> updateTransactionStatus(String firebaseId, TransactionStatus status) async {
+    try {
+      await _firestore.collection('transactions').doc(firebaseId).update({
+        'status': status.name,
+        'updatedAt': Timestamp.fromDate(DateTime.now()),
+      });
+    } catch (e) {
+      debugPrint('Update transaction status error: $e');
+      rethrow;
+    }
+  }
+
   Future<List<TransactionModel>> searchTransactions({
     required String userId,
     String? searchQuery,
@@ -167,33 +179,40 @@ class PaymentService {
     DateTime? endDate,
   }) async {
     try {
-      Query query = _firestore.collection('transactions').where('userId', isEqualTo: userId);
-      
+      Query query = _firestore
+          .collection('transactions')
+          .where('userId', isEqualTo: userId);
+
       if (category != null) {
         query = query.where('category', isEqualTo: category.name);
       }
-      
+
       if (startDate != null) {
-        query = query.where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate));
+        query = query.where('createdAt',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(startDate));
       }
-      
+
       if (endDate != null) {
-        query = query.where('createdAt', isLessThanOrEqualTo: Timestamp.fromDate(endDate));
+        query = query.where('createdAt',
+            isLessThanOrEqualTo: Timestamp.fromDate(endDate));
       }
-      
+
       final snapshot = await query.orderBy('createdAt', descending: true).get();
-      
+
       List<TransactionModel> transactions = snapshot.docs
-        .map((doc) => TransactionModel.fromJson({...doc.data() as Map<String, dynamic>, 'id': doc.id}))
-        .toList();
-      
+          .map((doc) => TransactionModel.fromJson(
+              {...doc.data() as Map<String, dynamic>, 'id': doc.id}))
+          .toList();
+
       if (searchQuery != null && searchQuery.isNotEmpty) {
-        transactions = transactions.where((t) => 
-          t.qrData.toLowerCase().contains(searchQuery.toLowerCase()) ||
-          (t.note?.toLowerCase().contains(searchQuery.toLowerCase()) ?? false)
-        ).toList();
+        transactions = transactions
+            .where((t) =>
+                t.qrData.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                (t.note?.toLowerCase().contains(searchQuery.toLowerCase()) ??
+                    false))
+            .toList();
       }
-      
+
       return transactions;
     } catch (e) {
       debugPrint('Search transactions error: $e');

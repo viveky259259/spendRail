@@ -22,6 +22,7 @@ class _PaymentProcessingScreenState extends ConsumerState<PaymentProcessingScree
   TransactionModel? _transaction;
   Timer? _manualApprovalTimer;
   Duration _manualRemaining = const Duration(minutes: 5);
+  bool _mockPaymentTriggered = false;
 
   @override
   void initState() {
@@ -43,6 +44,13 @@ class _PaymentProcessingScreenState extends ConsumerState<PaymentProcessingScree
         setState(() {
           _transaction = transaction;
           _handleCountdown(transaction.status);
+          
+          // Mock payment processing: when approved, complete after 3 seconds
+          if (transaction.status == TransactionStatus.transaction_approved && !_mockPaymentTriggered) {
+            _mockPaymentTriggered = true;
+            _triggerMockPaymentCompletion();
+          }
+          
           if (transaction.status == TransactionStatus.payment_completed ||
               transaction.status == TransactionStatus.payment_declined ||
               transaction.status == TransactionStatus.transaction_disapproved ||
@@ -69,6 +77,22 @@ class _PaymentProcessingScreenState extends ConsumerState<PaymentProcessingScree
         });
       },
     );
+  }
+
+  void _triggerMockPaymentCompletion() {
+    // Wait 3 seconds then update Firebase to payment_completed
+    Future.delayed(const Duration(seconds: 3), () async {
+      if (!mounted) return;
+      try {
+        final paymentService = ref.read(paymentServiceProvider);
+        await paymentService.updateTransactionStatus(
+          widget.firebaseId,
+          TransactionStatus.payment_completed,
+        );
+      } catch (e) {
+        debugPrint('Mock payment completion error: $e');
+      }
+    });
   }
 
   void _handleCountdown(TransactionStatus status) {
@@ -134,7 +158,7 @@ class _PaymentProcessingScreenState extends ConsumerState<PaymentProcessingScree
             children: [
               Icon(statusIcon, size: 100, color: statusColor),
               SizedBox(height: AppSpacing.xl),
-              Text(statusTitle, style: context.textStyles.headlineMedium?.bold?.copyWith(color: statusColor), textAlign: TextAlign.center),
+              Text(statusTitle, style: context.textStyles.headlineMedium?.bold.copyWith(color: statusColor), textAlign: TextAlign.center),
                if (_transaction != null) ...[
                 SizedBox(height: AppSpacing.xl),
                 Card(
@@ -192,7 +216,7 @@ class _PaymentProcessingScreenState extends ConsumerState<PaymentProcessingScree
 
   Widget _buildProcessingVisual(ThemeData theme) {
     final status = _transaction?.status;
-    if (status == TransactionStatus.payment_in_progress) {
+    if (status == TransactionStatus.transaction_approved || status == TransactionStatus.payment_in_progress) {
       return SizedBox(
         width: 100,
         height: 100,
@@ -200,7 +224,11 @@ class _PaymentProcessingScreenState extends ConsumerState<PaymentProcessingScree
           alignment: Alignment.center,
           children: [
             CircularProgressIndicator(strokeWidth: 6, valueColor: AlwaysStoppedAnimation<Color>(theme.colorScheme.primary)),
-            Icon(Icons.payments, color: theme.colorScheme.primary, size: 40),
+            Icon(
+              status == TransactionStatus.transaction_approved ? Icons.check_circle_outline : Icons.payments,
+              color: theme.colorScheme.primary,
+              size: 40,
+            ),
           ],
         ),
       );
@@ -217,6 +245,8 @@ class _PaymentProcessingScreenState extends ConsumerState<PaymentProcessingScree
     switch (_transaction?.status) {
       case TransactionStatus.waiting_on_manual_approval:
         return 'Waiting on manual approval';
+      case TransactionStatus.transaction_approved:
+        return 'Transaction approved - Processing payment...';
       case TransactionStatus.payment_in_progress:
         return 'Payment in progress';
       case TransactionStatus.waiting_on_approval:

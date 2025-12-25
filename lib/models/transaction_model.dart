@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 enum TransactionStatus {
   waiting_on_approval,
   waiting_on_manual_approval,
+  transaction_approved, // approved, ready for payment processing
   payment_in_progress,
   payment_completed,
   payment_declined,
