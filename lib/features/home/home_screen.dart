@@ -249,12 +249,16 @@ class TransactionListItem extends StatelessWidget {
 
     IconData getStatusIcon() {
       switch (transaction.status) {
-        case TransactionStatus.completed:
+        case TransactionStatus.payment_completed:
           return Icons.check_circle;
-        case TransactionStatus.processing:
+        case TransactionStatus.waiting_on_approval:
+        case TransactionStatus.waiting_on_manual_approval:
           return Icons.hourglass_empty;
-        case TransactionStatus.disapproved:
+        case TransactionStatus.payment_declined:
+        case TransactionStatus.transaction_disapproved:
           return Icons.cancel;
+        case TransactionStatus.payment_in_progress:
+          return Icons.payments;
         case TransactionStatus.timeout:
           return Icons.error;
       }
@@ -262,12 +266,16 @@ class TransactionListItem extends StatelessWidget {
 
     Color getStatusColor() {
       switch (transaction.status) {
-        case TransactionStatus.completed:
+        case TransactionStatus.payment_completed:
           return const Color(0xFF388E3C);
-        case TransactionStatus.processing:
+        case TransactionStatus.waiting_on_approval:
+        case TransactionStatus.waiting_on_manual_approval:
           return const Color(0xFFFFB300);
-        case TransactionStatus.disapproved:
+        case TransactionStatus.payment_declined:
+        case TransactionStatus.transaction_disapproved:
           return const Color(0xFFD32F2F);
+        case TransactionStatus.payment_in_progress:
+          return Theme.of(context).colorScheme.primary;
         case TransactionStatus.timeout:
           return const Color(0xFFD32F2F);
       }

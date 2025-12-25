@@ -36,7 +36,8 @@ class PaymentService {
         'qrData': qrData,
         'note': note,
         'voiceNoteUrl': voiceNoteUrl,
-        'status': TransactionStatus.processing.name,
+        // Initial state: waiting for automated or manual approval
+        'status': TransactionStatus.waiting_on_approval.name,
         'category': TransactionCategory.other.name,
         'createdAt': Timestamp.fromDate(now),
         'updatedAt': Timestamp.fromDate(now),
@@ -93,8 +94,9 @@ class PaymentService {
       
       subscription = listenToTransaction(firebaseId).listen(
         (transaction) {
-          if (transaction.status == TransactionStatus.completed || 
-              transaction.status == TransactionStatus.disapproved) {
+          if (transaction.status == TransactionStatus.payment_completed ||
+              transaction.status == TransactionStatus.payment_declined ||
+              transaction.status == TransactionStatus.transaction_disapproved) {
             subscription?.cancel();
             completer.complete(transaction);
           }

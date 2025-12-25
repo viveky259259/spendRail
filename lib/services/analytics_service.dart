@@ -16,7 +16,7 @@ class AnalyticsData {
 class AnalyticsService {
   AnalyticsData calculateAnalytics(List<TransactionModel> transactions) {
     final completedTransactions = transactions
-      .where((t) => t.status == TransactionStatus.completed)
+      .where((t) => t.status == TransactionStatus.payment_completed)
       .toList();
     
     final spendingByCategory = <TransactionCategory, double>{};

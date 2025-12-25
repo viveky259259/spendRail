@@ -1,6 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum TransactionStatus { processing, completed, disapproved, timeout }
+// App-wide transaction lifecycle statuses
+// Note: Keep legacy values for backward compatibility via parser
+enum TransactionStatus {
+  waiting_on_approval,
+  waiting_on_manual_approval,
+  payment_in_progress,
+  payment_completed,
+  payment_declined,
+  transaction_disapproved, // maps from server disapproved variants
+  timeout, // client-side timeout fallback
+}
 
 enum TransactionCategory { food, travel, supplies, other }
 
@@ -23,7 +33,7 @@ class TransactionModel {
     required this.qrData,
     this.note,
     this.voiceNoteUrl,
-    this.status = TransactionStatus.processing,
+    this.status = TransactionStatus.waiting_on_approval,
     this.category = TransactionCategory.other,
     required this.createdAt,
     required this.updatedAt,
@@ -36,10 +46,7 @@ class TransactionModel {
     qrData: json['qrData'] as String,
     note: json['note'] as String?,
     voiceNoteUrl: json['voiceNoteUrl'] as String?,
-    status: TransactionStatus.values.firstWhere(
-      (e) => e.name == json['status'],
-      orElse: () => TransactionStatus.processing,
-    ),
+    status: _parseStatus(json['status'] as String?),
     category: TransactionCategory.values.firstWhere(
       (e) => e.name == json['category'],
       orElse: () => TransactionCategory.other,
@@ -84,4 +91,28 @@ class TransactionModel {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
+}
+
+TransactionStatus _parseStatus(String? raw) {
+  // Normalize for safety
+  final value = (raw ?? '').trim();
+  // Direct enum match
+  for (final s in TransactionStatus.values) {
+    if (s.name == value) return s;
+  }
+  // Legacy -> new mappings
+  switch (value) {
+    case 'processing':
+      return TransactionStatus.waiting_on_approval;
+    case 'completed':
+      return TransactionStatus.payment_completed;
+    case 'disapproved':
+      return TransactionStatus.transaction_disapproved;
+  }
+  // Common misspelling from backend
+  if (value == 'transacation_disapproved') {
+    return TransactionStatus.transaction_disapproved;
+  }
+  // Fallback to waiting_on_approval
+  return TransactionStatus.waiting_on_approval;
 }
