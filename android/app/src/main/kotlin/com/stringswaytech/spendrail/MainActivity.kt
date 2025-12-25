@@ -1,4 +1,4 @@
-package com.mycompany.CounterApp
+package com.stringswaytech.spendrail
 
 import io.flutter.embedding.android.FlutterActivity
 

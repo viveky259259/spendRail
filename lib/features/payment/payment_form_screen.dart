@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:record/record.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:spendrail_worker_app/l10n/app_localizations.dart';
 import 'package:spendrail_worker_app/services/auth_service.dart';
 import 'package:spendrail_worker_app/services/payment_service.dart';
@@ -21,16 +22,82 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
   final _amountController = TextEditingController();
   final _noteController = TextEditingController();
   final _audioRecorder = AudioRecorder();
+  late final AudioPlayer _audioPlayer;
   bool _isRecording = false;
   bool _isLoading = false;
   String? _voiceNotePath;
+  String? _vpa; // Extracted from UPI QR (param 'pa')
+  String? _payeeName; // Optional: extracted 'pn'
+  bool _isPlaying = false;
+  Duration _duration = Duration.zero;
+  Duration _position = Duration.zero;
 
   @override
   void dispose() {
     _amountController.dispose();
     _noteController.dispose();
     _audioRecorder.dispose();
+    _audioPlayer.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _parseUpiData(widget.qrData);
+    _audioPlayer = AudioPlayer();
+    // Listen to audio player state and durations
+    _audioPlayer.onPlayerStateChanged.listen((state) {
+      setState(() => _isPlaying = state == PlayerState.playing);
+    });
+    _audioPlayer.onDurationChanged.listen((d) {
+      setState(() => _duration = d);
+    });
+    _audioPlayer.onPositionChanged.listen((p) {
+      setState(() => _position = p);
+    });
+  }
+
+  void _parseUpiData(String data) {
+    try {
+      final raw = data.trim();
+      Uri? uri;
+      // Some scanners might omit the scheme; normalize if needed
+      if (raw.contains('://')) {
+        uri = Uri.tryParse(raw);
+      } else if (raw.startsWith('upi/pay?') || raw.startsWith('pay?')) {
+        uri = Uri.tryParse('upi://$raw');
+      } else {
+        uri = Uri.tryParse(raw);
+      }
+
+      // Primary: use Uri queryParameters
+      String? vpa = uri?.queryParameters['pa'];
+      String? pn = uri?.queryParameters['pn'];
+
+      // Fallback: regex extraction if Uri fails
+      if ((vpa == null || vpa.isEmpty) && raw.contains('pa=')) {
+        final match = RegExp(r'(?:^|[?&])pa=([^&]+)').firstMatch(raw);
+        if (match != null && match.groupCount >= 1) {
+          vpa = Uri.decodeComponent(match.group(1)!);
+        }
+      }
+      if ((pn == null || pn.isEmpty) && raw.contains('pn=')) {
+        final match = RegExp(r'(?:^|[?&])pn=([^&]+)').firstMatch(raw);
+        if (match != null && match.groupCount >= 1) {
+          pn = Uri.decodeComponent(match.group(1)!);
+        }
+      }
+
+      setState(() {
+        _vpa = vpa;
+        _payeeName = pn;
+      });
+
+      debugPrint('Parsed UPI: pa=$_vpa, pn=$_payeeName from: $raw');
+    } catch (e) {
+      debugPrint('Failed to parse UPI QR data: $e');
+    }
   }
 
   Future<void> _toggleRecording() async {
@@ -42,10 +109,42 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
       });
     } else {
       if (await _audioRecorder.hasPermission()) {
+        // Stop any currently playing audio before starting a new recording
+        try { await _audioPlayer.stop(); } catch (e) { debugPrint('Audio stop before recording failed: $e'); }
         await _audioRecorder.start(const RecordConfig(), path: 'voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a');
         setState(() => _isRecording = true);
       }
     }
+  }
+
+  Future<void> _togglePlayPause() async {
+    if (_voiceNotePath == null) return;
+    try {
+      if (_isPlaying) {
+        await _audioPlayer.pause();
+      } else {
+        // If playback finished previously, restart from beginning
+        if (_duration != Duration.zero && _position >= _duration) {
+          await _audioPlayer.seek(Duration.zero);
+        }
+        await _audioPlayer.play(DeviceFileSource(_voiceNotePath!));
+      }
+    } catch (e) {
+      debugPrint('Audio play/pause error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unable to play voice note'), backgroundColor: Theme.of(context).colorScheme.error),
+        );
+      }
+    }
+  }
+
+  String _formatDuration(Duration d) {
+    final two = (int n) => n.toString().padLeft(2, '0');
+    final minutes = two(d.inMinutes.remainder(60));
+    final seconds = two(d.inSeconds.remainder(60));
+    final hours = d.inHours;
+    return hours > 0 ? '${two(hours)}:$minutes:$seconds' : '$minutes:$seconds';
   }
 
   Future<void> _submitPayment() async {
@@ -112,7 +211,42 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                         SizedBox(height: AppSpacing.md),
                         Text('QR Code Scanned', style: context.textStyles.titleMedium?.semiBold),
                         SizedBox(height: AppSpacing.sm),
-                        Text(widget.qrData, style: context.textStyles.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant), textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis),
+                        if (_vpa != null && _vpa!.isNotEmpty) ...[
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.alternate_email, size: 18, color: theme.colorScheme.primary),
+                              SizedBox(width: AppSpacing.xs),
+                              Flexible(
+                                child: Text(
+                                  _vpa!,
+                                  style: context.textStyles.bodyMedium?.copyWith(color: theme.colorScheme.onSurface),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_payeeName != null && _payeeName!.isNotEmpty) ...[
+                            SizedBox(height: AppSpacing.xs),
+                            Text(
+                              _payeeName!,
+                              style: context.textStyles.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ] else ...[
+                          Text(
+                            widget.qrData,
+                            style: context.textStyles.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                            textAlign: TextAlign.center,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -156,12 +290,43 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                 if (_voiceNotePath != null)
                   Padding(
                     padding: EdgeInsets.only(top: AppSpacing.sm),
-                    child: Row(
-                      children: [
-                        Icon(Icons.check_circle, color: theme.colorScheme.primary, size: 16),
-                        SizedBox(width: AppSpacing.xs),
-                        Text('Voice note recorded', style: context.textStyles.bodySmall?.copyWith(color: theme.colorScheme.primary)),
-                      ],
+                    child: Card(
+                      margin: EdgeInsets.zero,
+                      child: Padding(
+                        padding: AppSpacing.paddingMd,
+                        child: Row(
+                          children: [
+                            IconButton(
+                              onPressed: _togglePlayPause,
+                              icon: Icon(_isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill, color: theme.colorScheme.primary, size: 32),
+                              tooltip: _isPlaying ? 'Pause' : 'Play',
+                            ),
+                            SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Voice note', style: context.textStyles.bodyMedium?.semiBold),
+                                  SizedBox(height: 2),
+                                  Text('${_formatDuration(_position)} / ${_formatDuration(_duration)}', style: context.textStyles.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                                ],
+                              ),
+                            ),
+                            if (_position > Duration.zero && _duration > Duration.zero)
+                              SizedBox(
+                                width: 120,
+                                child: Slider(
+                                  value: _position.inMilliseconds.clamp(0, _duration.inMilliseconds).toDouble(),
+                                  max: (_duration.inMilliseconds == 0 ? 1 : _duration.inMilliseconds).toDouble(),
+                                  onChanged: (v) async {
+                                    final newPos = Duration(milliseconds: v.round());
+                                    try { await _audioPlayer.seek(newPos); } catch (e) { debugPrint('Seek error: $e'); }
+                                  },
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 SizedBox(height: AppSpacing.xl),

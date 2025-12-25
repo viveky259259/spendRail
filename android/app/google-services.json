@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "656360637630",
+    "project_id": "spendrail",
+    "storage_bucket": "spendrail.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:656360637630:android:a28665ce076d43b25d4aef",
+        "android_client_info": {
+          "package_name": "com.mycompany.CounterApp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA6SMyar7FIyY8tH6PFMKdtVoPrDlA__MM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

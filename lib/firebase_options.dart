@@ -44,29 +44,30 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'YOUR_WEB_API_KEY',
-    appId: 'YOUR_WEB_APP_ID',
-    messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    authDomain: 'YOUR_PROJECT_ID.firebaseapp.com',
-    storageBucket: 'YOUR_PROJECT_ID.appspot.com',
+    apiKey: 'AIzaSyA-D8ojJnLDisxKiM1sk2DJ1slvEtuTsfw',
+    appId: '1:656360637630:web:bc50c8be4d6f6a005d4aef',
+    messagingSenderId: '656360637630',
+    projectId: 'spendrail',
+    authDomain: 'spendrail.firebaseapp.com',
+    storageBucket: 'spendrail.firebasestorage.app',
+    measurementId: 'G-GH94DK9EZN',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'YOUR_ANDROID_API_KEY',
-    appId: 'YOUR_ANDROID_APP_ID',
-    messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_PROJECT_ID.appspot.com',
+    apiKey: 'AIzaSyA6SMyar7FIyY8tH6PFMKdtVoPrDlA__MM',
+    appId: '1:656360637630:android:a28665ce076d43b25d4aef',
+    messagingSenderId: '656360637630',
+    projectId: 'spendrail',
+    storageBucket: 'spendrail.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'YOUR_IOS_API_KEY',
-    appId: 'YOUR_IOS_APP_ID',
-    messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-    projectId: 'YOUR_PROJECT_ID',
-    storageBucket: 'YOUR_PROJECT_ID.appspot.com',
-    iosBundleId: 'com.spendrail.workerapp',
+    apiKey: 'AIzaSyBs05nEgKlfJmg3fDWIJCD_2tRdZWBuxrY',
+    appId: '1:656360637630:ios:28e868fae75996f45d4aef',
+    messagingSenderId: '656360637630',
+    projectId: 'spendrail',
+    storageBucket: 'spendrail.firebasestorage.app',
+    iosBundleId: 'com.mycompany.CounterApp',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(

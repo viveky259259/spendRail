@@ -38,6 +38,67 @@ class HomeScreen extends ConsumerWidget {
           ),
         ],
       ),
+      drawer: Drawer(
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: AppSpacing.paddingLg,
+                child: Text(l10n.translate('menu'), style: context.textStyles.titleLarge?.semiBold),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(Icons.person, color: theme.colorScheme.primary),
+                title: Text(l10n.translate('profile'), style: context.textStyles.bodyLarge),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  context.push('/profile');
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.history_rounded, color: theme.colorScheme.primary),
+                title: Text(l10n.translate('history'), style: context.textStyles.bodyLarge),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  context.push('/history');
+                },
+              ),
+              ListTile(
+                leading: Icon(Icons.analytics_rounded, color: theme.colorScheme.primary),
+                title: Text(l10n.translate('analytics'), style: context.textStyles.bodyLarge),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  context.push('/analytics');
+                },
+              ),
+              const Spacer(),
+              Padding(
+                padding: AppSpacing.paddingLg,
+                child: Consumer(
+                  builder: (context, ref, _) {
+                    return ElevatedButton.icon(
+                      onPressed: () async {
+                        final authService = ref.read(authServiceProvider);
+                        await authService.signOut();
+                        if (context.mounted) context.go('/login');
+                      },
+                      icon: const Icon(Icons.logout),
+                      label: Text(l10n.translate('logout')),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.colorScheme.error,
+                        foregroundColor: theme.colorScheme.onError,
+                        minimumSize: const Size.fromHeight(48),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: AppSpacing.paddingLg,

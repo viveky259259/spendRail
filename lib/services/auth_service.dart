@@ -90,6 +90,89 @@ class AuthService {
       rethrow;
     }
   }
+
+  // PHONE AUTH
+  Future<void> verifyPhoneNumber(
+    String phoneNumber, {
+    int? forceResendingToken,
+    required void Function(String verificationId, int? resendToken) codeSent,
+    required void Function(FirebaseAuthException error) verificationFailed,
+    required void Function(PhoneAuthCredential credential) verificationCompleted,
+    required void Function(String verificationId) codeAutoRetrievalTimeout,
+    Duration timeout = const Duration(seconds: 60),
+  }) async {
+    try {
+      await _auth.verifyPhoneNumber(
+        phoneNumber: phoneNumber,
+        timeout: timeout,
+        forceResendingToken: forceResendingToken,
+        verificationCompleted: (credential) async {
+          debugPrint('Phone verificationCompleted: ${credential.smsCode != null ? 'with SMS code' : 'instant'}');
+          verificationCompleted(credential);
+        },
+        verificationFailed: (e) {
+          debugPrint('Phone verificationFailed: $e');
+          verificationFailed(e);
+        },
+        codeSent: (verificationId, resendToken) {
+          debugPrint('Phone codeSent: verificationId received');
+          codeSent(verificationId, resendToken);
+        },
+        codeAutoRetrievalTimeout: (verificationId) {
+          debugPrint('Phone codeAutoRetrievalTimeout for $verificationId');
+          codeAutoRetrievalTimeout(verificationId);
+        },
+      );
+    } catch (e) {
+      debugPrint('verifyPhoneNumber error: $e');
+      rethrow;
+    }
+  }
+
+  Future<UserCredential> signInWithSmsCode(String verificationId, String smsCode) async {
+    try {
+      final credential = PhoneAuthProvider.credential(verificationId: verificationId, smsCode: smsCode);
+      final result = await _auth.signInWithCredential(credential);
+      await _ensureUserDocument();
+      return result;
+    } catch (e) {
+      debugPrint('signInWithSmsCode error: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> signInWithPhoneCredential(PhoneAuthCredential credential) async {
+    try {
+      await _auth.signInWithCredential(credential);
+      await _ensureUserDocument();
+    } catch (e) {
+      debugPrint('signInWithPhoneCredential error: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _ensureUserDocument() async {
+    try {
+      final user = _auth.currentUser;
+      if (user == null) return;
+      final docRef = _firestore.collection('users').doc(user.uid);
+      final doc = await docRef.get();
+      if (!doc.exists) {
+        final now = DateTime.now();
+        final data = UserModel(
+          id: user.uid,
+          email: user.email ?? '',
+          name: user.displayName ?? 'Worker',
+          preferredLanguage: 'en',
+          createdAt: now,
+          updatedAt: now,
+        );
+        await docRef.set(data.toJson());
+      }
+    } catch (e) {
+      debugPrint('ensureUserDocument error: $e');
+    }
+  }
 }
 
 final authServiceProvider = Provider((ref) => AuthService());

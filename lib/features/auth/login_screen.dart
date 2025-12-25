@@ -14,34 +14,66 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _phoneController = TextEditingController();
   bool _isLoading = false;
-  bool _obscurePassword = true;
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
-  Future<void> _signIn() async {
+  String _normalizeToE164(String input) {
+    final raw = input.trim();
+    final digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
+    if (raw.startsWith('+')) return '+$digits';
+    if (digits.length == 11 && digits.startsWith('0')) return '+91${digits.substring(1)}';
+    if (digits.length == 12 && digits.startsWith('91')) return '+$digits';
+    if (digits.length == 10) return '+91$digits';
+    if (digits.length >= 10 && digits.length <= 15) return '+$digits';
+    return '+91$digits';
+  }
+
+  Future<void> _sendOtp() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
-
+    final phone = _normalizeToE164(_phoneController.text);
+    final authService = ref.read(authServiceProvider);
     try {
-      final authService = ref.read(authServiceProvider);
-      await authService.signInWithEmail(_emailController.text.trim(), _passwordController.text);
-      
-      if (mounted) {
-        context.go('/');
-      }
+      await authService.verifyPhoneNumber(
+        phone,
+        codeSent: (verificationId, resendToken) {
+          if (!mounted) return;
+          context.push('/otp', extra: {
+            'verificationId': verificationId,
+            'phoneNumber': phone,
+            'resendToken': resendToken,
+          });
+        },
+        verificationFailed: (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(e.message ?? e.code), backgroundColor: Theme.of(context).colorScheme.error),
+          );
+        },
+        verificationCompleted: (credential) async {
+          try {
+            await authService.signInWithPhoneCredential(credential);
+            if (!mounted) return;
+            context.go('/');
+          } catch (e) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Auto verification failed: $e'), backgroundColor: Theme.of(context).colorScheme.error));
+          }
+        },
+        codeAutoRetrievalTimeout: (verificationId) {
+          // no-op: user can still enter code manually
+        },
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login failed: ${e.toString()}'), backgroundColor: Theme.of(context).colorScheme.error),
+          SnackBar(content: Text('Failed to send OTP: $e'), backgroundColor: Theme.of(context).colorScheme.error),
         );
       }
     } finally {
@@ -71,62 +103,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 Text(l10n.translate('welcome_back'), style: context.textStyles.bodyLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant), textAlign: TextAlign.center),
                 SizedBox(height: AppSpacing.xxl),
                 TextFormField(
-                  controller: _emailController,
+                  controller: _phoneController,
                   decoration: InputDecoration(
-                    labelText: l10n.translate('email'),
-                    prefixIcon: Icon(Icons.email_outlined, color: theme.colorScheme.primary),
+                    labelText: 'Phone number',
+                    hintText: '98765 43210',
+                    prefixText: '+91 ',
+                    prefixIcon: Icon(Icons.phone_iphone, color: theme.colorScheme.primary),
                   ),
-                  keyboardType: TextInputType.emailAddress,
+                  keyboardType: TextInputType.phone,
                   validator: (value) {
-                    if (value == null || value.isEmpty) return 'Please enter email';
-                    if (!value.contains('@')) return 'Please enter valid email';
-                    return null;
+                    final v = value?.trim() ?? '';
+                    if (v.isEmpty) return 'Please enter phone number';
+                    final digits = v.replaceAll(RegExp(r'[^0-9]'), '');
+                    if (v.startsWith('+')) {
+                      if (digits.length < 10) return 'Enter valid phone number';
+                      return null;
+                    }
+                    if (digits.length == 10 || (digits.length == 11 && digits.startsWith('0')) || (digits.length == 12 && digits.startsWith('91'))) {
+                      return null; // we'll auto-attach +91
+                    }
+                    return 'Enter 10-digit mobile number';
                   },
-                ),
-                SizedBox(height: AppSpacing.md),
-                TextFormField(
-                  controller: _passwordController,
-                  decoration: InputDecoration(
-                    labelText: l10n.translate('password'),
-                    prefixIcon: Icon(Icons.lock_outline, color: theme.colorScheme.primary),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: theme.colorScheme.onSurfaceVariant),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                    ),
-                  ),
-                  obscureText: _obscurePassword,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) return 'Please enter password';
-                    if (value.length < 6) return 'Password must be at least 6 characters';
-                    return null;
-                  },
-                ),
-                SizedBox(height: AppSpacing.md),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => context.push('/forgot-password'),
-                    child: Text(l10n.translate('forgot_password')),
-                  ),
+                  onFieldSubmitted: (_) => _sendOtp(),
                 ),
                 SizedBox(height: AppSpacing.lg),
                 ElevatedButton(
-                  onPressed: _isLoading ? null : _signIn,
+                  onPressed: _isLoading ? null : _sendOtp,
                   child: _isLoading
                     ? SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: theme.colorScheme.onPrimary))
-                    : Text(l10n.translate('sign_in')),
+                    : const Text('Send OTP'),
                 ),
-                SizedBox(height: AppSpacing.lg),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(l10n.translate('dont_have_account'), style: context.textStyles.bodyMedium),
-                    TextButton(
-                      onPressed: () => context.push('/register'),
-                      child: Text(l10n.translate('register')),
-                    ),
-                  ],
-                ),
+                SizedBox(height: AppSpacing.md),
+                Text('We will text you a verification code. Message and data rates may apply.', style: context.textStyles.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant), textAlign: TextAlign.center),
               ],
             ),
           ),

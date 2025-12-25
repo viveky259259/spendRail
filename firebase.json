@@ -1,0 +1,27 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "spendrail",
+          "appId": "1:656360637630:android:a28665ce076d43b25d4aef",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "spendrail",
+          "configurations": {
+            "android": "1:656360637630:android:a28665ce076d43b25d4aef",
+            "ios": "1:656360637630:ios:28e868fae75996f45d4aef",
+            "web": "1:656360637630:web:bc50c8be4d6f6a005d4aef"
+          }
+        }
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  }
+}

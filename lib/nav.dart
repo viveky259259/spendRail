@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 import 'package:spendrail_worker_app/features/analytics/analytics_screen.dart';
 import 'package:spendrail_worker_app/features/approval/request_approval_screen.dart';
 import 'package:spendrail_worker_app/features/auth/forgot_password_screen.dart';
@@ -11,15 +13,45 @@ import 'package:spendrail_worker_app/features/payment/payment_form_screen.dart';
 import 'package:spendrail_worker_app/features/payment/payment_processing_screen.dart';
 import 'package:spendrail_worker_app/features/payment/qr_scanner_screen.dart';
 import 'package:spendrail_worker_app/features/profile/profile_screen.dart';
+import 'package:spendrail_worker_app/features/auth/otp_verification_screen.dart';
 
 class AppRouter {
   static final GoRouter router = GoRouter(
-    initialLocation: AppRoutes.login,
+    initialLocation: AppRoutes.home,
+    refreshListenable: _AuthStreamNotifier(FirebaseAuth.instance.authStateChanges()),
+    redirect: (context, state) {
+      final isLoggedIn = FirebaseAuth.instance.currentUser != null;
+      final isAuthRoute = state.matchedLocation == AppRoutes.login || state.matchedLocation == AppRoutes.otp || state.matchedLocation == AppRoutes.register || state.matchedLocation == AppRoutes.forgotPassword;
+
+      // Not logged in: send to login (except when already there)
+      if (!isLoggedIn) {
+        return isAuthRoute ? null : AppRoutes.login;
+      }
+      // Logged in: prevent visiting auth routes
+      if (isLoggedIn && isAuthRoute) {
+        return AppRoutes.home;
+      }
+      return null;
+    },
     routes: [
       GoRoute(
         path: AppRoutes.login,
         name: 'login',
         pageBuilder: (context, state) => const NoTransitionPage(child: LoginScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.otp,
+        name: 'otp',
+        pageBuilder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>;
+          return NoTransitionPage(
+            child: OTPVerificationScreen(
+              verificationId: extra['verificationId'] as String,
+              phoneNumber: extra['phoneNumber'] as String,
+              resendToken: extra['resendToken'] as int?,
+            ),
+          );
+        },
       ),
       GoRoute(
         path: AppRoutes.register,
@@ -93,4 +125,19 @@ class AppRoutes {
   static const String requestApproval = '/request-approval';
   static const String history = '/history';
   static const String analytics = '/analytics';
+  static const String otp = '/otp';
+}
+
+class _AuthStreamNotifier extends ChangeNotifier {
+  late final StreamSubscription<dynamic> _sub;
+
+  _AuthStreamNotifier(Stream<dynamic> stream) {
+    _sub = stream.asBroadcastStream().listen((_) => notifyListeners());
+  }
+
+  @override
+  void dispose() {
+    _sub.cancel();
+    super.dispose();
+  }
 }

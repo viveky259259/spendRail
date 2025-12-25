@@ -79,21 +79,6 @@ class ProfileScreen extends ConsumerWidget {
                 ),
               ),
               SizedBox(height: AppSpacing.xl),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final authService = ref.read(authServiceProvider);
-                  await authService.signOut();
-                  if (context.mounted) {
-                    context.go('/login');
-                  }
-                },
-                icon: const Icon(Icons.logout),
-                label: Text(l10n.translate('logout')),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.colorScheme.error,
-                  foregroundColor: theme.colorScheme.onError,
-                ),
-              ),
             ],
           ),
         ),
