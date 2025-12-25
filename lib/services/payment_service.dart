@@ -19,6 +19,24 @@ class PaymentService {
   // SpendRail backend base (provided by user)
   static const String _apiBaseUrl = 'https://spendrail.onrender.com/api/v1';
   static const Duration _paymentTimeout = Duration(minutes: 5);
+
+  void _logDioFailure(String context, DioException e, {Object? payload}) {
+    try {
+      final req = e.requestOptions;
+      final res = e.response;
+      debugPrint('[API ERROR] $context');
+      debugPrint('  → ${req.method} ${req.baseUrl.isNotEmpty ? req.baseUrl : ''}${req.path}');
+      if (payload != null) debugPrint('  Payload: $payload');
+      debugPrint('  DioException.type: ${e.type}');
+      if (e.message != null) debugPrint('  Message: ${e.message}');
+      if (res != null) {
+        debugPrint('  Status: ${res.statusCode}');
+        debugPrint('  Response data: ${res.data}');
+      }
+    } catch (logErr) {
+      debugPrint('Failed to log API error: $logErr');
+    }
+  }
   
   Future<String> initiatePayment({
     required String userId,
@@ -57,11 +75,16 @@ class PaymentService {
         );
 
         if (response.statusCode != 200) {
-          debugPrint('Spend approval API returned ${response.statusCode}: ${response.data}');
+          debugPrint('[API FAILURE] POST $_apiBaseUrl/transcationApproval');
+          debugPrint('  Status: ${response.statusCode}');
+          debugPrint('  Body: ${response.data}');
           throw Exception('Spend approval request failed');
         }
+      } on DioException catch (e) {
+        _logDioFailure('Spend approval API call failed', e, payload: {'firebaseId': firebaseId});
+        rethrow;
       } catch (e) {
-        debugPrint('Spend approval API error: $e');
+        debugPrint('Spend approval API unexpected error: $e');
         // Surface the error to caller so UI can notify the user
         rethrow;
       }
